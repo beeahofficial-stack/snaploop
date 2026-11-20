@@ -1,8 +1,6 @@
 import { createClient } from "@/lib/supabase/server";
 import { NextRequest, NextResponse } from "next/server";
 import { getCurrentSession } from "@/lib/auth/session";
-import { cookies } from "next/headers";
-import { SNAPLOOP_USER_COOKIE } from "@/lib/auth/session";
 
 export async function POST(req: NextRequest) {
   const session = await getCurrentSession();
