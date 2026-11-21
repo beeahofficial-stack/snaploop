@@ -2,7 +2,7 @@ import { createClient } from "@/lib/supabase/server";
 import { normalizeStylePrefs } from "@/lib/stylePrefs";
 import { NextRequest, NextResponse } from "next/server";
 import { cookies } from "next/headers";
-import { getCurrentSession, SNAPLOOP_USER_COOKIE } from "@/lib/auth/session";
+import { getCurrentSession, isUUID, SNAPLOOP_USER_COOKIE } from "@/lib/auth/session";
 
 export async function GET(req: NextRequest) {
   const supabase = await createClient();
@@ -54,8 +54,8 @@ export async function PATCH(req: NextRequest) {
     maxAge: 60 * 60 * 24 * 30,
   });
 
-  // Also attempt Supabase update if we have a logged-in Supabase user
-  if (session.user) {
+  // Also attempt Supabase update if we have a logged-in Supabase user with valid UUID
+  if (session.user && isUUID(session.user.id)) {
     try {
       const supabase = await createClient();
       const updates: Record<string, unknown> = {};

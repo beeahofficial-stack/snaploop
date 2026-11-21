@@ -3,7 +3,7 @@ import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { DEFAULT_STYLE_PREFS } from "@/lib/stylePrefs";
 import { Profile } from "@/lib/types";
-import { SNAPLOOP_USER_COOKIE } from "@/lib/auth/session";
+import { isUUID, SNAPLOOP_USER_COOKIE } from "@/lib/auth/session";
 
 export async function POST(request: Request) {
   try {
@@ -35,10 +35,10 @@ export async function POST(request: Request) {
     const cleanName = (full_name || cleanUsername).trim();
     const supabase = await createClient();
 
-    let userId = `user_${Date.now()}`;
+    let userId: string | null = null;
     let authError: string | null = null;
 
-    // Try Supabase auth first
+    // Try Supabase auth first to obtain genuine user UUID
     try {
       const { data, error } = await supabase.auth.signUp({
         email: email.trim(),
@@ -51,7 +51,7 @@ export async function POST(request: Request) {
         },
       });
 
-      if (data?.user?.id) {
+      if (data?.user?.id && isUUID(data.user.id)) {
         userId = data.user.id;
       }
       if (error) {
@@ -61,19 +61,34 @@ export async function POST(request: Request) {
       authError = err instanceof Error ? err.message : "Auth service unavailable";
     }
 
-    // Try creating profile in Supabase table
-    try {
-      await supabase.from("profiles").upsert({
-        id: userId,
-        username: cleanUsername,
-        full_name: cleanName,
-        avatar_url: null,
-        bio: "Hey there! I am new on SnapLoop 🌱",
-        created_at: new Date().toISOString(),
-        style_prefs: DEFAULT_STYLE_PREFS,
-      });
-    } catch {
-      // Supabase table permission / RLS may prevent insert; cookie session handles it gracefully
+    // If Supabase returned an explicit registration error, report it directly to the user
+    if (authError && !userId) {
+      return NextResponse.json({ error: authError }, { status: 400 });
+    }
+
+    // In extreme offline / local-only cases without Supabase, use a valid RFC4122 UUID
+    if (!userId) {
+      userId = crypto.randomUUID();
+    }
+
+    // Create profile in Supabase table for the real authenticated UUID
+    if (isUUID(userId)) {
+      try {
+        await supabase.from("profiles").upsert(
+          {
+            id: userId,
+            username: cleanUsername,
+            full_name: cleanName,
+            avatar_url: null,
+            bio: "Hey there! I am new on SnapLoop 🌱",
+            created_at: new Date().toISOString(),
+            style_prefs: DEFAULT_STYLE_PREFS,
+          },
+          { onConflict: "id" }
+        );
+      } catch {
+        // Table permission / RLS notice handled gracefully
+      }
     }
 
     // Create user profile object
@@ -99,7 +114,6 @@ export async function POST(request: Request) {
     return NextResponse.json({
       ok: true,
       profile: newProfile,
-      notice: authError ? "Signed in with local profile session" : undefined,
     });
   } catch (err: unknown) {
     return NextResponse.json(

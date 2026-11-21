@@ -1,6 +1,6 @@
 import { createClient } from "@/lib/supabase/server";
 import { NextRequest, NextResponse } from "next/server";
-import { getCurrentSession, SNAPLOOP_USER_COOKIE } from "@/lib/auth/session";
+import { getCurrentSession, isUUID, SNAPLOOP_USER_COOKIE } from "@/lib/auth/session";
 import { cookies } from "next/headers";
 
 export async function POST(req: NextRequest) {
@@ -20,15 +20,20 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Max 5MB for profile picture" }, { status: 400 });
   }
 
-  const userId = session.profile.id;
+  const authUserId = (session.user && isUUID(session.user.id))
+    ? session.user.id
+    : (session.profile && isUUID(session.profile.id))
+      ? session.profile.id
+      : null;
+
   let avatar_url: string | null = null;
 
-  // Try Supabase Storage
-  if (session.user) {
+  // Try Supabase Storage if user has a genuine authenticated UUID
+  if (authUserId) {
     try {
       const supabase = await createClient();
       const ext = file.name.split(".").pop() || "jpg";
-      const path = `${userId}/avatar.${ext}`;
+      const path = `${authUserId}/avatar.${ext}`;
       const { error: uploadError } = await supabase.storage
         .from("avatars")
         .upload(path, file, { contentType: file.type, upsert: true });
@@ -42,7 +47,7 @@ export async function POST(req: NextRequest) {
     }
   }
 
-  // Fallback: base64 data URL — works for all users
+  // Fallback: base64 data URL — works cleanly for all users
   if (!avatar_url) {
     const arrayBuffer = await file.arrayBuffer();
     const base64 = Buffer.from(arrayBuffer).toString("base64");
@@ -59,14 +64,14 @@ export async function POST(req: NextRequest) {
     maxAge: 60 * 60 * 24 * 30,
   });
 
-  // Also try updating Supabase profiles table
-  if (session.user) {
+  // Also try updating Supabase profiles table if we have a real UUID
+  if (authUserId) {
     try {
       const supabase = await createClient();
       await supabase
         .from("profiles")
         .update({ avatar_url })
-        .eq("id", session.user.id);
+        .eq("id", authUserId);
     } catch {
       // best effort
     }

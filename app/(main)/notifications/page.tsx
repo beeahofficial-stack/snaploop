@@ -1,7 +1,7 @@
 import { createClient } from "@/lib/supabase/server";
 import { redirect } from "next/navigation";
 import NotificationsClient from "@/components/NotificationsClient";
-import { getCurrentSession } from "@/lib/auth/session";
+import { getCurrentSession, isUUID } from "@/lib/auth/session";
 
 import { Notification } from "@/lib/types";
 
@@ -13,7 +13,7 @@ export default async function NotificationsPage() {
 
   try {
     const supabase = await createClient();
-    if (session.user) {
+    if (session.user && isUUID(session.user.id)) {
       const { data } = await supabase
         .from("notifications")
         .select(`*, actor:profiles!notifications_actor_id_fkey(*)`)

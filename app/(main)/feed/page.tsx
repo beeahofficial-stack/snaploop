@@ -2,7 +2,7 @@ import { createClient } from "@/lib/supabase/server";
 import { redirect } from "next/navigation";
 import FeedClient from "@/components/FeedClient";
 import { DEFAULT_STYLE_PREFS, normalizeStylePrefs } from "@/lib/stylePrefs";
-import { getCurrentSession } from "@/lib/auth/session";
+import { getCurrentSession, isUUID } from "@/lib/auth/session";
 import { Post } from "@/lib/types";
 
 export default async function FeedPage() {
@@ -32,13 +32,13 @@ export default async function FeedPage() {
       .order("created_at", { ascending: false })
       .limit(30);
 
-    if (session.user) {
+    if (session.user && isUUID(session.user.id)) {
       const { data: following } = await supabase
         .from("follows")
         .select("following_id")
         .eq("follower_id", session.user.id);
 
-      const followingIds = following?.map((f) => f.following_id) ?? [];
+      const followingIds = following?.map((f) => f.following_id).filter(isUUID) ?? [];
       const feedUserIds = [...followingIds, session.user.id];
 
       if (prefs.feedMode === "following" && feedUserIds.length > 0) {

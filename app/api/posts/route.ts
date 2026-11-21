@@ -1,6 +1,6 @@
 import { createClient } from "@/lib/supabase/server";
 import { NextRequest, NextResponse } from "next/server";
-import { getCurrentSession } from "@/lib/auth/session";
+import { getCurrentSession, isUUID } from "@/lib/auth/session";
 
 export async function POST(req: NextRequest) {
   const session = await getCurrentSession();
@@ -8,7 +8,29 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  const userId = session.profile.id;
+  // Resolve the genuine authenticated Supabase user's UUID (user.id)
+  let authUserId: string | null = null;
+  if (session.user && isUUID(session.user.id)) {
+    authUserId = session.user.id;
+  } else {
+    try {
+      const supabase = await createClient();
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
+      if (user && isUUID(user.id)) {
+        authUserId = user.id;
+      }
+    } catch {
+      // ignore
+    }
+  }
+
+  if (!authUserId && session.profile && isUUID(session.profile.id)) {
+    authUserId = session.profile.id;
+  }
+
+  const userId = authUserId || session.profile.id;
   const username = session.profile.username;
 
   const formData = await req.formData();
@@ -19,12 +41,12 @@ export async function POST(req: NextRequest) {
 
   // Handle image upload
   if (file && file.size > 0) {
-    // Try Supabase Storage first (for real authenticated users)
-    if (session.user) {
+    // Try Supabase Storage first if user has a real authenticated Supabase UUID
+    if (authUserId) {
       try {
         const supabase = await createClient();
         const ext = file.name.split(".").pop() || "jpg";
-        const path = `${userId}/${Date.now()}.${ext}`;
+        const path = `${authUserId}/${Date.now()}.${ext}`;
         const { error: uploadError } = await supabase.storage
           .from("posts")
           .upload(path, file, { contentType: file.type, upsert: false });
@@ -38,7 +60,7 @@ export async function POST(req: NextRequest) {
       }
     }
 
-    // Fallback: embed as base64 data URL (works for all session types)
+    // Fallback: embed as base64 data URL (works cleanly for all session types)
     if (!image_url) {
       const arrayBuffer = await file.arrayBuffer();
       const base64 = Buffer.from(arrayBuffer).toString("base64");
@@ -50,11 +72,10 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Post must have a caption or image" }, { status: 400 });
   }
 
-  // Try inserting into Supabase DB
-  if (session.user) {
+  // Try inserting into Supabase DB ONLY when we have a real authenticated Supabase UUID
+  if (authUserId) {
     try {
       const supabase = await createClient();
-      const authUserId = session.user.id;
 
       // Ensure profile row exists first to satisfy foreign key constraint posts_user_id_fkey
       try {
@@ -120,7 +141,8 @@ export async function POST(req: NextRequest) {
     }
   }
 
-  // Local-only post (cookie session / demo) — return a valid post object
+  // Unauthenticated / demo / local-only post:
+  // Handled cleanly without sending invalid UUID strings to Supabase!
   const localPost = {
     id: `local_${Date.now()}`,
     user_id: userId,
@@ -152,7 +174,13 @@ export async function DELETE(req: NextRequest) {
 
   const { postId } = await req.json();
 
-  if (session.user) {
+  const authUserId = (session.user && isUUID(session.user.id))
+    ? session.user.id
+    : (session.profile && isUUID(session.profile.id))
+      ? session.profile.id
+      : null;
+
+  if (authUserId && isUUID(postId)) {
     try {
       const supabase = await createClient();
       const { data: post } = await supabase
@@ -161,7 +189,7 @@ export async function DELETE(req: NextRequest) {
         .eq("id", postId)
         .single();
 
-      if (!post || post.user_id !== session.user.id) {
+      if (!post || post.user_id !== authUserId) {
         return NextResponse.json({ error: "Not allowed" }, { status: 403 });
       }
 
@@ -177,7 +205,7 @@ export async function DELETE(req: NextRequest) {
         .from("posts")
         .delete()
         .eq("id", postId)
-        .eq("user_id", session.user.id);
+        .eq("user_id", authUserId);
 
       if (deleteError) {
         console.error("[Posts] Supabase delete failed (check posts RLS):", deleteError);

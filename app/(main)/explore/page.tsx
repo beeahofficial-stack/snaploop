@@ -1,7 +1,7 @@
 import { createClient } from "@/lib/supabase/server";
 import { redirect } from "next/navigation";
 import ExploreClient from "@/components/ExploreClient";
-import { getCurrentSession } from "@/lib/auth/session";
+import { getCurrentSession, isUUID } from "@/lib/auth/session";
 import { Post } from "@/lib/types";
 
 export default async function ExplorePage() {
@@ -20,7 +20,7 @@ export default async function ExplorePage() {
       .limit(30);
 
     const postIds = posts?.map((p) => p.id) ?? [];
-    const { data: userLikes } = postIds.length && session.user
+    const { data: userLikes } = postIds.length && session.user && isUUID(session.user.id)
       ? await supabase
           .from("likes")
           .select("post_id")

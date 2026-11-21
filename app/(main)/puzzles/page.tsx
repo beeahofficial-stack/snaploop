@@ -2,7 +2,7 @@ import { createClient } from "@/lib/supabase/server";
 import { redirect } from "next/navigation";
 import PuzzlesClient from "@/components/PuzzlesClient";
 import { DEFAULT_STYLE_PREFS, normalizeStylePrefs } from "@/lib/stylePrefs";
-import { getCurrentSession } from "@/lib/auth/session";
+import { getCurrentSession, isUUID } from "@/lib/auth/session";
 import { Profile } from "@/lib/types";
 
 export default async function PuzzlesPage() {
@@ -23,13 +23,13 @@ export default async function PuzzlesPage() {
 
   try {
     const supabase = await createClient();
-    if (session.user) {
+    if (session.user && isUUID(session.user.id)) {
       const { data: following } = await supabase
         .from("follows")
         .select("following_id")
         .eq("follower_id", session.user.id);
 
-      const followingIds = following?.map((f) => f.following_id) ?? [];
+      const followingIds = following?.map((f) => f.following_id).filter(isUUID) ?? [];
 
       if (followingIds.length > 0) {
         const { data: fProfiles } = await supabase

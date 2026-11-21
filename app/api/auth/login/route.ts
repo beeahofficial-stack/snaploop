@@ -1,9 +1,9 @@
 import { cookies } from "next/headers";
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
-import { DEFAULT_STYLE_PREFS, normalizeStylePrefs } from "@/lib/stylePrefs";
+import { normalizeStylePrefs } from "@/lib/stylePrefs";
 import { Profile } from "@/lib/types";
-import { SNAPLOOP_USER_COOKIE } from "@/lib/auth/session";
+import { isUUID, SNAPLOOP_USER_COOKIE } from "@/lib/auth/session";
 
 export async function POST(request: Request) {
   try {
@@ -20,14 +20,14 @@ export async function POST(request: Request) {
     const cleanEmail = email.trim();
     const supabase = await createClient();
 
-    // Try Supabase auth first
+    // Try Supabase auth first to get genuine user UUID
     try {
       const { data, error } = await supabase.auth.signInWithPassword({
         email: cleanEmail,
         password,
       });
 
-      if (!error && data?.user) {
+      if (!error && data?.user && isUUID(data.user.id)) {
         // Fetch or create profile
         const { data: dbProfile } = await supabase
           .from("profiles")
@@ -66,8 +66,12 @@ export async function POST(request: Request) {
 
         return NextResponse.json({ ok: true, profile });
       }
+
+      if (error) {
+        return NextResponse.json({ error: error.message }, { status: 401 });
+      }
     } catch {
-      // Supabase threw, fall through to cookie/fallback login
+      // Supabase connection error, fall through to cookie/fallback login
     }
 
     // Check existing snaploop_user cookie
@@ -84,31 +88,8 @@ export async function POST(request: Request) {
       }
     }
 
-    // If password is at least 6 characters, let user log in with email-based profile
-    if (password.length >= 6) {
-      const username = cleanEmail.split("@")[0].replace(/[^a-zA-Z0-9_]/g, "_") || "user";
-      const profile: Profile = {
-        id: `user_${Date.now()}`,
-        username,
-        full_name: username,
-        bio: "Hey there! I am using SnapLoop 🌱",
-        avatar_url: null,
-        created_at: new Date().toISOString(),
-        style_prefs: DEFAULT_STYLE_PREFS,
-      };
-
-      cookieStore.set(SNAPLOOP_USER_COOKIE, JSON.stringify(profile), {
-        path: "/",
-        httpOnly: true,
-        sameSite: "lax",
-        maxAge: 60 * 60 * 24 * 30,
-      });
-
-      return NextResponse.json({ ok: true, profile });
-    }
-
     return NextResponse.json(
-      { error: "Invalid credentials. Password must be at least 6 characters." },
+      { error: "Invalid credentials. Please verify your email and password." },
       { status: 401 }
     );
   } catch (err: unknown) {

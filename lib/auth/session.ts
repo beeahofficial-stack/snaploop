@@ -6,6 +6,11 @@ import { Profile } from "@/lib/types";
 export const SNAPLOOP_USER_COOKIE = "snaploop_user";
 export const SNAPLOOP_DEMO_COOKIE = "snaploop_demo";
 
+export function isUUID(str: unknown): str is string {
+  if (typeof str !== "string" || !str) return false;
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(str);
+}
+
 export const DEFAULT_GUEST_PROFILE: Profile = {
   id: "demo-user-id",
   username: "beeahofficial",
@@ -36,7 +41,7 @@ export async function getCurrentSession(): Promise<CurrentSession> {
       error: userError,
     } = await supabase.auth.getUser();
 
-    if (!userError && user) {
+    if (!userError && user && isUUID(user.id)) {
       // Try fetching profile from Supabase profiles table
       let dbProfile: Profile | null = null;
       try {
@@ -50,8 +55,19 @@ export async function getCurrentSession(): Promise<CurrentSession> {
         // Table or RLS error, proceed with auth metadata fallback
       }
 
+      // Check if user had an existing cookie profile to preserve style_prefs or bio
+      let existingCookieProfile: Profile | null = null;
+      if (userCookie) {
+        try {
+          existingCookieProfile = JSON.parse(userCookie) as Profile;
+        } catch {
+          // ignore
+        }
+      }
+
       const username =
         dbProfile?.username ||
+        existingCookieProfile?.username ||
         user.user_metadata?.preferred_username ||
         user.user_metadata?.user_name ||
         user.email?.split("@")[0]?.replace(/[^a-zA-Z0-9_]/g, "_") ||
@@ -59,21 +75,23 @@ export async function getCurrentSession(): Promise<CurrentSession> {
 
       const full_name =
         dbProfile?.full_name ||
+        existingCookieProfile?.full_name ||
         user.user_metadata?.full_name ||
         user.user_metadata?.name ||
         username;
 
       const avatar_url =
         dbProfile?.avatar_url ||
+        existingCookieProfile?.avatar_url ||
         user.user_metadata?.avatar_url ||
         user.user_metadata?.picture ||
         null;
 
-      const bio = dbProfile?.bio || "Hey there! I am using SnapLoop 🌱";
-      const style_prefs = normalizeStylePrefs(dbProfile?.style_prefs);
+      const bio = dbProfile?.bio || existingCookieProfile?.bio || "Hey there! I am using SnapLoop 🌱";
+      const style_prefs = normalizeStylePrefs(dbProfile?.style_prefs || existingCookieProfile?.style_prefs);
 
       const profile: Profile = {
-        id: user.id,
+        id: user.id, // Always genuine authenticated Supabase UUID
         username,
         full_name,
         bio,
@@ -81,6 +99,18 @@ export async function getCurrentSession(): Promise<CurrentSession> {
         created_at: dbProfile?.created_at || user.created_at || new Date().toISOString(),
         style_prefs,
       };
+
+      // Auto-heal cookie so any old non-UUID "user_..." in the cookie is replaced by user.id
+      try {
+        cookieStore.set(SNAPLOOP_USER_COOKIE, JSON.stringify(profile), {
+          path: "/",
+          httpOnly: true,
+          sameSite: "lax",
+          maxAge: 60 * 60 * 24 * 30,
+        });
+      } catch {
+        // May fail in read-only server component render; ignore
+      }
 
       return {
         user: { id: user.id, email: user.email },
@@ -96,16 +126,18 @@ export async function getCurrentSession(): Promise<CurrentSession> {
   // 2. Check custom user cookie session
   if (userCookie) {
     try {
-      const parsed = JSON.parse(userCookie) as Profile;
+      const parsed = JSON.parse(userCookie) as Profile & { email?: string };
       if (parsed && parsed.id && parsed.username) {
+        // Only treat as real Supabase user if id is a valid UUID
+        const hasValidUUID = isUUID(parsed.id);
         return {
-          user: { id: parsed.id, email: (parsed as { email?: string }).email },
+          user: hasValidUUID ? { id: parsed.id, email: parsed.email } : null,
           profile: {
             ...parsed,
             style_prefs: normalizeStylePrefs(parsed.style_prefs),
           },
           isAuthenticated: true,
-          isDemo: false,
+          isDemo: !hasValidUUID,
         };
       }
     } catch {

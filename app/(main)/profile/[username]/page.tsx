@@ -3,7 +3,7 @@ import { cookies } from "next/headers";
 import Link from "next/link";
 import ProfileClient from "@/components/ProfileClient";
 import { DEFAULT_STYLE_PREFS, normalizeStylePrefs } from "@/lib/stylePrefs";
-import { getCurrentSession } from "@/lib/auth/session";
+import { getCurrentSession, isUUID } from "@/lib/auth/session";
 import { Post, Profile } from "@/lib/types";
 
 const DEMO_PROFILE: Profile = {
@@ -82,8 +82,14 @@ export default async function ProfilePage({
         cleanUsername ||
         `user_${user?.id?.slice(0, 8) || "guest"}`;
 
+      const resolvedId = (user && isUUID(user.id))
+        ? user.id
+        : (session.profile && isUUID(session.profile.id))
+          ? session.profile.id
+          : (user?.id || session.profile?.id || "demo-user-id");
+
       profile = {
-        id: user?.id || session.profile?.id || "demo-user-id",
+        id: resolvedId,
         username: targetUsername,
         full_name:
           user?.user_metadata?.full_name ||
@@ -101,7 +107,7 @@ export default async function ProfilePage({
       };
 
       // In the background, auto-heal and create the missing row in public.profiles so future queries succeed
-      if (user) {
+      if (user && isUUID(user.id)) {
         Promise.resolve(
           supabase
             .from("profiles")
@@ -155,35 +161,37 @@ export default async function ProfilePage({
 
   // 4. Query posts for this profile
   let posts: Post[] = [];
-  try {
-    const { data: postsData, error: postsError } = await supabase
-      .from("posts")
-      .select("id,user_id,caption,image_url,created_at,profiles(*),likes(count),comments(count)")
-      .eq("user_id", profile.id)
-      .order("created_at", { ascending: false });
-
-    if (!postsError && postsData) {
-      posts = postsData as unknown as Post[];
-    } else if (postsError) {
-      console.warn("[Profile] Joined posts query failed, attempting simple select:", postsError.message);
-      // Fallback simple query without profiles(*) join in case profiles row missing or join fails
-      const { data: simplePosts } = await supabase
+  if (isUUID(profile.id)) {
+    try {
+      const { data: postsData, error: postsError } = await supabase
         .from("posts")
-        .select("id,user_id,caption,image_url,created_at")
+        .select("id,user_id,caption,image_url,created_at,profiles(*),likes(count),comments(count)")
         .eq("user_id", profile.id)
         .order("created_at", { ascending: false });
 
-      if (simplePosts) {
-        posts = simplePosts.map((p) => ({
-          ...p,
-          profiles: profile!,
-          likes: [{ count: 0 }],
-          comments: [{ count: 0 }],
-        })) as unknown as Post[];
+      if (!postsError && postsData) {
+        posts = postsData as unknown as Post[];
+      } else if (postsError) {
+        console.warn("[Profile] Joined posts query failed, attempting simple select:", postsError.message);
+        // Fallback simple query without profiles(*) join in case profiles row missing or join fails
+        const { data: simplePosts } = await supabase
+          .from("posts")
+          .select("id,user_id,caption,image_url,created_at")
+          .eq("user_id", profile.id)
+          .order("created_at", { ascending: false });
+
+        if (simplePosts) {
+          posts = simplePosts.map((p) => ({
+            ...p,
+            profiles: profile!,
+            likes: [{ count: 0 }],
+            comments: [{ count: 0 }],
+          })) as unknown as Post[];
+        }
       }
+    } catch (err) {
+      console.error("[Profile] Error loading user posts:", err);
     }
-  } catch (err) {
-    console.error("[Profile] Error loading user posts:", err);
   }
 
   // 5. Query follower & following counts
@@ -191,31 +199,33 @@ export default async function ProfilePage({
   let realFollowingCount = 0;
   let isFollowing = false;
 
-  try {
-    const [followersRes, followingRes, followCheckRes] = await Promise.all([
-      supabase
-        .from("follows")
-        .select("*", { count: "exact", head: true })
-        .eq("following_id", profile.id),
-      supabase
-        .from("follows")
-        .select("*", { count: "exact", head: true })
-        .eq("follower_id", profile.id),
-      user && user.id !== profile.id
-        ? supabase
-            .from("follows")
-            .select("id")
-            .eq("follower_id", user.id)
-            .eq("following_id", profile.id)
-            .maybeSingle()
-        : Promise.resolve({ data: null }),
-    ]);
+  if (isUUID(profile.id)) {
+    try {
+      const [followersRes, followingRes, followCheckRes] = await Promise.all([
+        supabase
+          .from("follows")
+          .select("*", { count: "exact", head: true })
+          .eq("following_id", profile.id),
+        supabase
+          .from("follows")
+          .select("*", { count: "exact", head: true })
+          .eq("follower_id", profile.id),
+        user && isUUID(user.id) && user.id !== profile.id
+          ? supabase
+              .from("follows")
+              .select("id")
+              .eq("follower_id", user.id)
+              .eq("following_id", profile.id)
+              .maybeSingle()
+          : Promise.resolve({ data: null }),
+      ]);
 
-    realFollowersCount = followersRes.count ?? 0;
-    realFollowingCount = followingRes.count ?? 0;
-    isFollowing = !!followCheckRes.data;
-  } catch (err) {
-    console.warn("[Profile] Follows query notice:", err);
+      realFollowersCount = followersRes.count ?? 0;
+      realFollowingCount = followingRes.count ?? 0;
+      isFollowing = !!followCheckRes.data;
+    } catch (err) {
+      console.warn("[Profile] Follows query notice:", err);
+    }
   }
 
   const currentUserId = user?.id || session.profile?.id || (isDemo ? "demo-user-id" : "");

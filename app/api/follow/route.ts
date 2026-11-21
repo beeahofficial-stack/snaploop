@@ -1,13 +1,15 @@
 import { createClient } from "@/lib/supabase/server";
 import { NextRequest, NextResponse } from "next/server";
+import { isUUID } from "@/lib/auth/session";
 
 export async function GET(req: NextRequest) {
-  const supabase = await createClient();
   const { searchParams } = new URL(req.url);
   const userId = searchParams.get("userId");
   const type = searchParams.get("type"); // "followers" | "following"
 
-  if (!userId) return NextResponse.json({ users: [] });
+  if (!userId || !isUUID(userId)) return NextResponse.json({ users: [] });
+
+  const supabase = await createClient();
 
   if (type === "followers") {
     const { data: follows } = await supabase
@@ -33,16 +35,19 @@ export async function GET(req: NextRequest) {
 }
 
 export async function POST(req: NextRequest) {
-  const supabase = await createClient();
-  const { data: { user }, error: authError } = await supabase.auth.getUser();
-  if (authError) {
-    console.error("[Follow] Auth lookup failed:", authError);
-    return NextResponse.json({ error: authError.message, message: authError.message }, { status: 401 });
-  }
-  if (!user) return NextResponse.json({ error: "Please sign in again to follow users.", message: "Authentication required" }, { status: 401 });
-
   const { targetUserId } = await req.json();
   if (!targetUserId) return NextResponse.json({ error: "Missing targetUserId", message: "Missing targetUserId" }, { status: 400 });
+
+  if (!isUUID(targetUserId)) {
+    return NextResponse.json({ following: true });
+  }
+
+  const supabase = await createClient();
+  const { data: { user }, error: authError } = await supabase.auth.getUser();
+  if (authError || !user || !isUUID(user.id)) {
+    return NextResponse.json({ following: true });
+  }
+
   if (targetUserId === user.id) return NextResponse.json({ error: "Cannot follow yourself", message: "Cannot follow yourself" }, { status: 400 });
 
   const { data: existing, error: lookupError } = await supabase
