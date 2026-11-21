@@ -28,6 +28,9 @@
 
 html,
 body {
+  width: 100%;
+  max-width: 100%;
+  overflow-x: hidden;
   background-color: var(--bg-primary);
   background-image:
     radial-gradient(ellipse 80% 50% at 10% -10%, rgba(168, 214, 58, 0.14), transparent 55%),
@@ -148,10 +151,131 @@ img {
   .main-shell {
     margin-left: 0 !important;
   }
+
+  #__next,
+  [data-snaploop-root],
+  .main-shell,
+  .snaploop-feed,
+  .snaploop-profile {
+    width: 100%;
+    max-width: 100%;
+    min-width: 0;
+    overflow-x: hidden;
+  }
+
+  .main-shell {
+    padding-bottom: 76px;
+  }
+
+  .snaploop-feed {
+    padding-left: 0;
+    padding-right: 0;
+  }
+
+  .feed-topbar {
+    padding: 10px 12px !important;
+  }
+
+  .feed-filter-row,
+  .snaploop-composer,
+  .snaploop-feed .post-card {
+    width: 100%;
+  }
+
+  .feed-filter-row {
+    padding-left: 12px !important;
+    padding-right: 12px !important;
+  }
+
+  .snaploop-composer {
+    padding-left: 12px !important;
+    padding-right: 12px !important;
+  }
+
+  .post-card {
+    border-radius: 14px;
+    min-width: 0;
+  }
+
+  .comments-modal {
+    max-height: 78vh;
+  }
+
+  .snaploop-composer-row,
+  .snaploop-composer-footer {
+    min-width: 0;
+  }
+
+  .post-card .post-header {
+    min-width: 0;
+  }
+
+  .post-card .post-header > a,
+  .post-card .post-caption,
+  .post-card .post-counts {
+    min-width: 0;
+  }
+
+  .snaploop-profile {
+    padding-left: 8px !important;
+    padding-right: 8px !important;
+  }
+
+  .mobile-nav {
+    height: 64px;
+    min-width: 0;
+  }
+
+  .mobile-nav a {
+    min-width: 0;
+    max-width: 20%;
+    padding-left: 6px !important;
+    padding-right: 6px !important;
+  }
+
+  .profile-tabs {
+    overflow-x: auto;
+    overflow-y: hidden;
+    flex-wrap: nowrap !important;
+    scrollbar-width: none;
+  }
+
+  .profile-post-grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr)) !important;
+  }
+
+  .snaploop-profile {
+    min-width: 0;
+  }
 }
 
-@media (min-width: 769px) {
-  .mobile-nav {
-    display: none !important;
+@media (max-width: 420px) {
+  .feed-streak-count,
+  .feed-streak-label {
+    display: none;
+  }
+
+  .feed-filter-row {
+    gap: 6px !important;
+  }
+
+  .snaploop-composer-footer {
+    flex-wrap: wrap;
+  }
+
+  .snaploop-composer-footer button {
+    min-height: 42px;
+  }
+
+  .profile-post-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+  }
+
+  .profile-tabs button {
+    min-width: max-content;
+  }
+
+  .comments-modal {
+    width: 100% !important;
   }
 }

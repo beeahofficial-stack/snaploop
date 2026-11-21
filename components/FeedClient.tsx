@@ -245,9 +245,9 @@ export default function FeedClient({
   const activeStory = activeStoryIndex !== null ? stories[activeStoryIndex] : null;
 
   return (
-    <div style={styles.page}>
+    <div className="snaploop-feed" style={styles.page}>
       {/* Industry-standard Top Navigation Bar */}
-      <header style={styles.topBar}>
+      <header className="feed-topbar" style={styles.topBar}>
         <div style={styles.brandRow}>
           <span style={styles.brand}>SnapLoop</span>
           <span style={styles.brandSprout}>🌱</span>
@@ -368,7 +368,7 @@ export default function FeedClient({
       </div>
 
       {/* Social Feed Mood Filter Tabs */}
-      <div style={styles.filterRow}>
+      <div className="feed-filter-row" style={styles.filterRow}>
         {feedFilters.map((item) => {
           const isActive = activeFilter === item.id;
           return (
@@ -388,7 +388,7 @@ export default function FeedClient({
       </div>
 
       {/* Main Social Feed Composer */}
-      <div style={styles.composer}>
+      <div className="snaploop-composer" style={styles.composer}>
         <CreatePost onCreated={handleCreated} />
       </div>
 

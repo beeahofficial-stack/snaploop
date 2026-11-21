@@ -54,17 +54,69 @@ export async function POST(req: NextRequest) {
   if (session.user) {
     try {
       const supabase = await createClient();
+      const authUserId = session.user.id;
+
+      // Ensure profile row exists first to satisfy foreign key constraint posts_user_id_fkey
+      try {
+        await supabase.from("profiles").upsert(
+          {
+            id: authUserId,
+            username: session.profile.username,
+            full_name: session.profile.full_name || session.profile.username,
+            avatar_url: session.profile.avatar_url,
+            bio: session.profile.bio,
+            created_at: new Date().toISOString(),
+            style_prefs: session.profile.style_prefs,
+          },
+          { onConflict: "id" }
+        );
+      } catch (err: unknown) {
+        console.warn("[Posts] Pre-insert profile auto-heal notice:", err);
+      }
+
       const { data: post, error } = await supabase
         .from("posts")
-        .insert({ user_id: userId, caption, image_url })
+        .insert({ user_id: authUserId, caption, image_url })
         .select(`*, profiles(*), likes(count), comments(count)`)
         .single();
 
       if (!error && post) {
         return NextResponse.json({ post: { ...post, user_has_liked: false } });
       }
-    } catch {
-      // Fall through to local-only post
+
+      // If joined select failed (e.g. profiles table join or RLS), fallback to simple insert
+      const { data: simplePost, error: simpleError } = await supabase
+        .from("posts")
+        .insert({ user_id: authUserId, caption, image_url })
+        .select("id, user_id, caption, image_url, created_at")
+        .single();
+
+      if (!simpleError && simplePost) {
+        return NextResponse.json({
+          post: {
+            ...simplePost,
+            profiles: session.profile,
+            likes: [{ count: 0 }],
+            comments: [{ count: 0 }],
+            user_has_liked: false,
+          },
+        });
+      }
+
+      const finalError = error || simpleError;
+      if (finalError) {
+        console.error("[Posts] Supabase insert failed (check posts RLS and foreign keys):", finalError);
+        return NextResponse.json({
+          error: finalError.message,
+          message: `Could not save post: ${finalError.message}`,
+        }, { status: 500 });
+      }
+    } catch (error) {
+      console.error("[Posts] Unexpected Supabase insert failure:", error);
+      return NextResponse.json({
+        error: error instanceof Error ? error.message : "Unexpected database error",
+        message: "Could not save post to Supabase. Please try again.",
+      }, { status: 500 });
     }
   }
 
@@ -121,9 +173,25 @@ export async function DELETE(req: NextRequest) {
         }
       }
 
-      await supabase.from("posts").delete().eq("id", postId);
-    } catch {
-      // best effort
+      const { error: deleteError } = await supabase
+        .from("posts")
+        .delete()
+        .eq("id", postId)
+        .eq("user_id", session.user.id);
+
+      if (deleteError) {
+        console.error("[Posts] Supabase delete failed (check posts RLS):", deleteError);
+        return NextResponse.json({
+          error: deleteError.message,
+          message: `Could not delete post: ${deleteError.message}`,
+        }, { status: 500 });
+      }
+    } catch (error) {
+      console.error("[Posts] Unexpected delete failure:", error);
+      return NextResponse.json({
+        error: error instanceof Error ? error.message : "Unexpected database error",
+        message: "Could not delete this post. Please try again.",
+      }, { status: 500 });
     }
   }
 

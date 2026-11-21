@@ -45,10 +45,13 @@ export default function CreatePost({ onCreated }: { onCreated: (post: Post) => v
         setPreview(null);
         setOpen(false);
       } else {
-        toast.error(data.error || "Failed to post");
+        const message = data?.message || data?.error || `Failed to post (${res.status})`;
+        console.error("[CreatePost] Post mutation failed:", { status: res.status, data });
+        toast.error(message);
       }
-    } catch {
-      toast.error("Network error. Please try again.");
+    } catch (error) {
+      console.error("[CreatePost] Network mutation failed:", error);
+      toast.error("Could not reach the post service. Please try again.");
     } finally {
       setLoading(false);
     }
@@ -56,7 +59,7 @@ export default function CreatePost({ onCreated }: { onCreated: (post: Post) => v
 
   if (!open) {
     return (
-      <div style={createRow}>
+      <div style={createRow} className="snaploop-composer-row">
         <button onClick={() => setOpen(true)} style={createBtn}>
           <span style={cameraBadge}>✍️</span>
           <span style={promptText}>Share a thought or snap…</span>
@@ -139,7 +142,7 @@ export default function CreatePost({ onCreated }: { onCreated: (post: Post) => v
           </div>
         )}
 
-        <div style={footer}>
+        <div className="snaploop-composer-footer" style={footer}>
           <button
             type="button"
             onClick={() => fileRef.current?.click()}

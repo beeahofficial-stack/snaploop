@@ -32,8 +32,10 @@ export default function PostCard({ post, currentUserId, onDelete }: PostCardProp
   const [likeAnim, setLikeAnim] = useState(false);
 
   const handleLike = async () => {
-    setLiked(!liked);
-    setLikeCount(liked ? likeCount - 1 : likeCount + 1);
+    const previousLiked = liked;
+    const previousCount = likeCount;
+    setLiked(!previousLiked);
+    setLikeCount(previousLiked ? Math.max(0, previousCount - 1) : previousCount + 1);
     setLikeAnim(true);
     setTimeout(() => setLikeAnim(false), 300);
 
@@ -43,9 +45,12 @@ export default function PostCard({ post, currentUserId, onDelete }: PostCardProp
       body: JSON.stringify({ postId: post.id }),
     });
     if (!res.ok) {
-      setLiked(liked);
-      setLikeCount(liked ? likeCount : likeCount - 1);
-      toast.error("Something went wrong");
+      setLiked(previousLiked);
+      setLikeCount(previousCount);
+      const data = await res.json().catch(() => null);
+      const message = data?.message || data?.error || `Like failed (${res.status})`;
+      console.error("[PostCard] Like mutation failed:", { status: res.status, data });
+      toast.error(message);
     }
   };
 
@@ -60,7 +65,10 @@ export default function PostCard({ post, currentUserId, onDelete }: PostCardProp
       toast.success("Post deleted");
       onDelete?.(post.id);
     } else {
-      toast.error("Failed to delete");
+      const data = await res.json().catch(() => null);
+      const message = data?.message || data?.error || `Delete failed (${res.status})`;
+      console.error("[PostCard] Delete mutation failed:", { status: res.status, data });
+      toast.error(message);
     }
   };
 
@@ -69,9 +77,9 @@ export default function PostCard({ post, currentUserId, onDelete }: PostCardProp
 
   return (
     <>
-      <article style={styles.card}>
+      <article className="post-card" style={styles.card}>
         {/* IG header */}
-        <div style={styles.header}>
+        <div className="post-header" style={styles.header}>
           <Link href={`/profile/${profile.username}`} style={styles.userInfo}>
             {profile.avatar_url ? (
               <div style={styles.avatarWrap}>
@@ -132,7 +140,7 @@ export default function PostCard({ post, currentUserId, onDelete }: PostCardProp
 
         {/* Caption under media */}
         {post.image_url && post.caption && (
-          <p style={styles.caption}>
+          <p className="post-caption" style={styles.caption}>
             <Link href={`/profile/${profile.username}`} style={styles.captionUser}>
               {profile.username}
             </Link>{" "}

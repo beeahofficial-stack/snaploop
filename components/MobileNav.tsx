@@ -77,6 +77,7 @@ export default function MobileNav({ profile }: { profile: Profile | null }) {
           style={{
             ...styles.link,
             color: isActive ? "#5F8520" : "#6F7658",
+            minWidth: 0,
           }}
         >
           <div style={styles.iconWrap}>
@@ -117,6 +118,7 @@ const styles: Record<string, React.CSSProperties> = {
     padding: "6px 12px",
     position: "relative",
     transition: "transform 0.15s ease",
+    minWidth: 0,
   },
   iconWrap: {
     position: "relative",

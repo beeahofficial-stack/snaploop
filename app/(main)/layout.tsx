@@ -15,7 +15,7 @@ export default async function MainLayout({
   }
 
   return (
-    <div style={styles.wrapper}>
+    <div data-snaploop-root style={styles.wrapper}>
       <Sidebar profile={session.profile} />
       <main className="main-shell" style={styles.main}>
         {children}
@@ -28,11 +28,16 @@ export default async function MainLayout({
 const styles: Record<string, React.CSSProperties> = {
   wrapper: {
     display: "flex",
+    width: "100%",
+    maxWidth: "100%",
+    minWidth: 0,
+    overflowX: "hidden",
     minHeight: "100vh",
     background: "#F6F3EB",
   },
   main: {
     flex: 1,
+    minWidth: 0,
     marginLeft: "260px",
     minHeight: "100vh",
     paddingBottom: "88px",

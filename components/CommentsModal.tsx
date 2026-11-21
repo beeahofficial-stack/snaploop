@@ -30,8 +30,22 @@ export default function CommentsModal({
 
   useEffect(() => {
     fetch(`/api/comments?postId=${post.id}`)
-      .then(r => r.json())
-      .then(d => { setComments(d.comments ?? []); setLoading(false); });
+      .then(async r => {
+        const data = await r.json().catch(() => null);
+        if (!r.ok) {
+          const message = data?.message || data?.error || `Could not load comments (${r.status})`;
+          console.error("[CommentsModal] Load failed:", { status: r.status, data });
+          toast.error(message);
+        } else {
+          setComments(data?.comments ?? []);
+        }
+        setLoading(false);
+      })
+      .catch(error => {
+        console.error("[CommentsModal] Network load failed:", error);
+        toast.error("Could not reach the comments service. Please try again.");
+        setLoading(false);
+      });
     setTimeout(() => inputRef.current?.focus(), 100);
   }, [post.id]);
 
@@ -39,25 +53,35 @@ export default function CommentsModal({
     e.preventDefault();
     if (!body.trim() || posting) return;
     setPosting(true);
-    const res = await fetch("/api/comments", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ postId: post.id, body }),
-    });
-    const data = await res.json();
-    if (res.ok) {
-      setComments(c => [...c, data.comment]);
-      setBody("");
-      onCommentAdded();
-    } else {
-      toast.error(data.error);
+
+    try {
+      const res = await fetch("/api/comments", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ postId: post.id, body }),
+      });
+      const data = await res.json().catch(() => null);
+
+      if (res.ok) {
+        setComments(c => [...c, data.comment]);
+        setBody("");
+        onCommentAdded();
+      } else {
+        const message = data?.message || data?.error || `Comment failed (${res.status})`;
+        console.error("[CommentsModal] Submit failed:", { status: res.status, data });
+        toast.error(message);
+      }
+    } catch (error) {
+      console.error("[CommentsModal] Network submit failed:", error);
+      toast.error("Could not reach the comments service. Please try again.");
+    } finally {
+      setPosting(false);
     }
-    setPosting(false);
   };
 
   return (
     <div style={overlay} onClick={onClose}>
-      <div style={modal} onClick={e => e.stopPropagation()}>
+      <div className="comments-modal" style={modal} onClick={e => e.stopPropagation()}>
         <div style={mHeader}>
           <span style={mTitle}>Comments</span>
           <button onClick={onClose} style={closeBtn}>✕</button>

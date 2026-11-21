@@ -28,40 +28,27 @@ export async function getCurrentSession(): Promise<CurrentSession> {
   const userCookie = cookieStore.get(SNAPLOOP_USER_COOKIE)?.value;
   const isDemo = cookieStore.get(SNAPLOOP_DEMO_COOKIE)?.value === "true";
 
-  // 1. Check custom user cookie session first (fast & reliable)
-  if (userCookie) {
-    try {
-      const parsed = JSON.parse(userCookie) as Profile;
-      if (parsed && parsed.id && parsed.username) {
-        return {
-          user: { id: parsed.id, email: (parsed as { email?: string }).email },
-          profile: {
-            ...parsed,
-            style_prefs: normalizeStylePrefs(parsed.style_prefs),
-          },
-          isAuthenticated: true,
-          isDemo: false,
-        };
-      }
-    } catch {
-      // invalid JSON, fall through
-    }
-  }
-
-  // 2. Check Supabase auth session
+  // 1. Check Supabase auth session first (primary source of truth in production)
   try {
     const supabase = await createClient();
     const {
       data: { user },
+      error: userError,
     } = await supabase.auth.getUser();
 
-    if (user) {
+    if (!userError && user) {
       // Try fetching profile from Supabase profiles table
-      const { data: dbProfile } = await supabase
-        .from("profiles")
-        .select("*")
-        .eq("id", user.id)
-        .maybeSingle();
+      let dbProfile: Profile | null = null;
+      try {
+        const { data } = await supabase
+          .from("profiles")
+          .select("*")
+          .eq("id", user.id)
+          .maybeSingle();
+        dbProfile = data as Profile | null;
+      } catch {
+        // Table or RLS error, proceed with auth metadata fallback
+      }
 
       const username =
         dbProfile?.username ||
@@ -102,8 +89,28 @@ export async function getCurrentSession(): Promise<CurrentSession> {
         isDemo: false,
       };
     }
-  } catch {
-    // Supabase error, fall through to demo/guest check
+  } catch (err) {
+    console.warn("[Session] Supabase auth check notice:", err);
+  }
+
+  // 2. Check custom user cookie session
+  if (userCookie) {
+    try {
+      const parsed = JSON.parse(userCookie) as Profile;
+      if (parsed && parsed.id && parsed.username) {
+        return {
+          user: { id: parsed.id, email: (parsed as { email?: string }).email },
+          profile: {
+            ...parsed,
+            style_prefs: normalizeStylePrefs(parsed.style_prefs),
+          },
+          isAuthenticated: true,
+          isDemo: false,
+        };
+      }
+    } catch {
+      // invalid JSON, fall through
+    }
   }
 
   // 3. Check Demo / Guest mode

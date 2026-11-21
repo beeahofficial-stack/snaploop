@@ -1,5 +1,5 @@
 "use client";
-import { useState, useRef } from "react";
+import { useState, useRef, useEffect } from "react";
 import Link from "next/link";
 import { Post, Profile } from "@/lib/types";
 import PostCard from "./PostCard";
@@ -55,6 +55,26 @@ export default function ProfileClient({
   const [saving, setSaving] = useState(false);
   const [savingDecor, setSavingDecor] = useState(false);
 
+  // Sync any posts created in the feed from localStorage on mount so they always show on Profile
+  useEffect(() => {
+    if (!isOwnProfile) return;
+    try {
+      const localStr = localStorage.getItem("snaploop_local_posts");
+      if (localStr) {
+        const localList: Post[] = JSON.parse(localStr);
+        if (Array.isArray(localList) && localList.length > 0) {
+          setPosts((prev) => {
+            const existingIds = new Set(prev.map((p) => p.id));
+            const newPosts = localList.filter((p) => !existingIds.has(p.id));
+            return newPosts.length > 0 ? [...newPosts, ...prev] : prev;
+          });
+        }
+      }
+    } catch {
+      // ignore
+    }
+  }, [isOwnProfile, profile.id]);
+
   // New pin creation in Comfort Moodboard
   const [newPinTitle, setNewPinTitle] = useState("");
   const [newPinEmoji, setNewPinEmoji] = useState("✨");
@@ -95,7 +115,10 @@ export default function ProfileClient({
     if (!res.ok) {
       setIsFollowing(isFollowing);
       setFollowersCount(followersCount);
-      toast.error("Failed to update follow status");
+      const data = await res.json().catch(() => null);
+      const message = data?.message || data?.error || `Follow failed (${res.status})`;
+      console.error("[ProfileClient] Follow mutation failed:", { status: res.status, data });
+      toast.error(message);
     }
   };
 
@@ -222,6 +245,7 @@ export default function ProfileClient({
 
   return (
     <div
+      className="snaploop-profile"
       style={{
         ...styles.page,
         backgroundImage: activePattern.cssPattern !== "none" ? activePattern.cssPattern : undefined,
@@ -406,7 +430,7 @@ export default function ProfileClient({
       </div>
 
       {/* Comfort Zone Navigation Tabs: Snaps vs Pinterest Moodboard vs Puzzle Streaks */}
-      <div style={styles.tabsBar}>
+      <div className="profile-tabs" style={styles.tabsBar}>
         <button
           onClick={() => setActiveTab("posts")}
           style={{
@@ -465,11 +489,34 @@ export default function ProfileClient({
 
           {posts.length === 0 ? (
             <div style={styles.empty}>
-              <div style={{ fontSize: 38, marginBottom: 8 }}>📷</div>
-              <p style={{ color: "#6F7658", fontSize: 14 }}>No snaps shared yet.</p>
+              <div style={{ fontSize: 44, marginBottom: 12 }}>📷</div>
+              <h3 style={{ fontSize: "16px", fontWeight: "700", color: "#2C3318", margin: "0 0 6px" }}>No posts yet</h3>
+              <p style={{ color: "#6F7658", fontSize: "13px", margin: "0 0 16px" }}>
+                {isOwnProfile
+                  ? "Share your first photo or thought from the Home feed!"
+                  : `@${profile.username} hasn't posted any snaps yet.`}
+              </p>
+              {isOwnProfile && (
+                <Link
+                  href="/feed"
+                  style={{
+                    display: "inline-block",
+                    padding: "10px 20px",
+                    background: "linear-gradient(135deg, #A8D63A, #5F8520)",
+                    color: "#FFFFFF",
+                    borderRadius: "14px",
+                    fontWeight: "700",
+                    fontSize: "13px",
+                    textDecoration: "none",
+                    boxShadow: "0 4px 14px rgba(95,133,32,0.2)",
+                  }}
+                >
+                  Share a Snap 🌱
+                </Link>
+              )}
             </div>
           ) : postViewMode === "grid" ? (
-            <div style={styles.grid}>
+            <div className="profile-post-grid" style={styles.grid}>
               {posts.map((post) => (
                 <button
                   key={post.id}
