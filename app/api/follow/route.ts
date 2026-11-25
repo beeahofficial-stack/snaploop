@@ -36,16 +36,14 @@ export async function GET(req: NextRequest) {
 
 export async function POST(req: NextRequest) {
   const { targetUserId } = await req.json();
-  if (!targetUserId) return NextResponse.json({ error: "Missing targetUserId", message: "Missing targetUserId" }, { status: 400 });
-
-  if (!isUUID(targetUserId)) {
-    return NextResponse.json({ following: true });
+  if (!targetUserId || !isUUID(targetUserId)) {
+    return NextResponse.json({ error: "Invalid targetUserId: must be a valid UUID", message: "Invalid targetUserId: must be a valid UUID" }, { status: 400 });
   }
 
   const supabase = await createClient();
   const { data: { user }, error: authError } = await supabase.auth.getUser();
   if (authError || !user || !isUUID(user.id)) {
-    return NextResponse.json({ following: true });
+    return NextResponse.json({ error: "Unauthorized", message: "Please sign in with a valid account to follow users" }, { status: 401 });
   }
 
   if (targetUserId === user.id) return NextResponse.json({ error: "Cannot follow yourself", message: "Cannot follow yourself" }, { status: 400 });

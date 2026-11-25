@@ -12,19 +12,15 @@ function apiError(action: string, error: unknown, status = 500) {
 
 export async function POST(req: NextRequest) {
   const { postId } = await req.json();
-  if (!postId) return NextResponse.json({ error: "Missing postId", message: "Missing postId" }, { status: 400 });
-
-  // For local or non-UUID posts, toggle optimistically without hitting Supabase UUID columns
-  if (!isUUID(postId)) {
-    return NextResponse.json({ liked: true });
+  if (!postId || !isUUID(postId)) {
+    return NextResponse.json({ error: "Invalid postId: must be a valid UUID", message: "Invalid postId: must be a valid UUID" }, { status: 400 });
   }
 
   const supabase = await createClient();
   const { data: { user }, error: authError } = await supabase.auth.getUser();
 
-  // If unauthenticated or no valid Supabase user UUID, handle cleanly
   if (authError || !user || !isUUID(user.id)) {
-    return NextResponse.json({ liked: true });
+    return NextResponse.json({ error: "Unauthorized", message: "Please sign in with a valid account to like posts" }, { status: 401 });
   }
 
   const { data: existing, error: lookupError } = await supabase

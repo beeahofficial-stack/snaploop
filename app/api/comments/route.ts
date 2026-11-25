@@ -1,6 +1,6 @@
 import { createClient } from "@/lib/supabase/server";
 import { NextRequest, NextResponse } from "next/server";
-import { getCurrentSession, isUUID } from "@/lib/auth/session";
+import { isUUID } from "@/lib/auth/session";
 
 export async function GET(req: NextRequest) {
   const { searchParams } = new URL(req.url);
@@ -28,30 +28,18 @@ export async function GET(req: NextRequest) {
 
 export async function POST(req: NextRequest) {
   const { postId, body } = await req.json();
-  if (!postId) return NextResponse.json({ error: "Missing postId", message: "Missing postId" }, { status: 400 });
-  if (!body?.trim()) return NextResponse.json({ error: "Comment cannot be empty", message: "Comment cannot be empty" }, { status: 400 });
+  if (!postId || !isUUID(postId)) {
+    return NextResponse.json({ error: "Invalid postId: must be a valid UUID", message: "Invalid postId: must be a valid UUID" }, { status: 400 });
+  }
+  if (!body?.trim()) {
+    return NextResponse.json({ error: "Comment cannot be empty", message: "Comment cannot be empty" }, { status: 400 });
+  }
 
-  const session = await getCurrentSession();
-
-  // If the post is local/demo or the user is not authenticated in Supabase, handle cleanly
   const supabase = await createClient();
-  const { data: { user } } = await supabase.auth.getUser();
+  const { data: { user }, error: authError } = await supabase.auth.getUser();
 
-  if (!isUUID(postId) || !user || !isUUID(user.id)) {
-    const localComment = {
-      id: `comment_${Date.now()}`,
-      post_id: postId,
-      user_id: session.profile?.id || "local-user",
-      body: body.trim(),
-      created_at: new Date().toISOString(),
-      profiles: {
-        id: session.profile?.id || "local-user",
-        username: session.profile?.username || "you",
-        full_name: session.profile?.full_name || null,
-        avatar_url: session.profile?.avatar_url || null,
-      },
-    };
-    return NextResponse.json({ comment: localComment });
+  if (authError || !user || !isUUID(user.id)) {
+    return NextResponse.json({ error: "Unauthorized", message: "Please sign in with a valid account to comment" }, { status: 401 });
   }
 
   // Ensure profile row exists to prevent foreign key constraint violation (comments_user_id_fkey)
@@ -134,16 +122,14 @@ export async function POST(req: NextRequest) {
 
 export async function DELETE(req: NextRequest) {
   const { commentId } = await req.json();
-  if (!commentId) return NextResponse.json({ error: "Missing commentId" }, { status: 400 });
-
-  if (!isUUID(commentId)) {
-    return NextResponse.json({ success: true });
+  if (!commentId || !isUUID(commentId)) {
+    return NextResponse.json({ error: "Invalid commentId: must be a valid UUID", message: "Invalid commentId: must be a valid UUID" }, { status: 400 });
   }
 
   const supabase = await createClient();
-  const { data: { user } } = await supabase.auth.getUser();
-  if (!user || !isUUID(user.id)) {
-    return NextResponse.json({ success: true });
+  const { data: { user }, error: authError } = await supabase.auth.getUser();
+  if (authError || !user || !isUUID(user.id)) {
+    return NextResponse.json({ error: "Unauthorized", message: "Authentication required" }, { status: 401 });
   }
 
   const { error } = await supabase.from("comments").delete().eq("id", commentId).eq("user_id", user.id);

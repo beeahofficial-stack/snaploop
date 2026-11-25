@@ -49,6 +49,18 @@ export default function LoginPage() {
 
       const data = await res.json();
       if (res.ok) {
+        try {
+          await supabase.auth.signInWithPassword({
+            email: email.trim(),
+            password,
+          });
+        } catch {
+          // ignore
+        }
+        try {
+          localStorage.removeItem("snaploop_local_posts");
+        } catch {}
+
         toast.success(`Welcome to SnapLoop, ${data.profile?.full_name || username}! ✨`, {
           icon: "🌱",
         });
@@ -84,6 +96,18 @@ export default function LoginPage() {
 
       const data = await res.json();
       if (res.ok) {
+        try {
+          await supabase.auth.signInWithPassword({
+            email: email.trim(),
+            password,
+          });
+        } catch {
+          // ignore
+        }
+        try {
+          localStorage.removeItem("snaploop_local_posts");
+        } catch {}
+
         toast.success(`Welcome back, ${data.profile?.full_name || "friend"}! 🌿`);
         router.push("/feed");
         router.refresh();

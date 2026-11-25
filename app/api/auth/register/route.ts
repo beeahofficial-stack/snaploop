@@ -61,34 +61,30 @@ export async function POST(request: Request) {
       authError = err instanceof Error ? err.message : "Auth service unavailable";
     }
 
-    // If Supabase returned an explicit registration error, report it directly to the user
-    if (authError && !userId) {
-      return NextResponse.json({ error: authError }, { status: 400 });
-    }
-
-    // In extreme offline / local-only cases without Supabase, use a valid RFC4122 UUID
-    if (!userId) {
-      userId = crypto.randomUUID();
+    // If Supabase returned an error or did not return a user, surface the error
+    if (authError || !userId) {
+      return NextResponse.json(
+        { error: authError || "Failed to create account. Please verify your details." },
+        { status: 400 }
+      );
     }
 
     // Create profile in Supabase table for the real authenticated UUID
-    if (isUUID(userId)) {
-      try {
-        await supabase.from("profiles").upsert(
-          {
-            id: userId,
-            username: cleanUsername,
-            full_name: cleanName,
-            avatar_url: null,
-            bio: "Hey there! I am new on SnapLoop 🌱",
-            created_at: new Date().toISOString(),
-            style_prefs: DEFAULT_STYLE_PREFS,
-          },
-          { onConflict: "id" }
-        );
-      } catch {
-        // Table permission / RLS notice handled gracefully
-      }
+    try {
+      await supabase.from("profiles").upsert(
+        {
+          id: userId,
+          username: cleanUsername,
+          full_name: cleanName,
+          avatar_url: null,
+          bio: "Hey there! I am new on SnapLoop 🌱",
+          created_at: new Date().toISOString(),
+          style_prefs: DEFAULT_STYLE_PREFS,
+        },
+        { onConflict: "id" }
+      );
+    } catch (profileErr) {
+      console.warn("[Register] Profile upsert notice:", profileErr);
     }
 
     // Create user profile object

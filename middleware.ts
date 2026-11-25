@@ -5,29 +5,32 @@ export async function middleware(request: NextRequest) {
   let supabaseResponse = NextResponse.next({ request });
   const { pathname } = request.nextUrl;
 
-  // 1. Check custom user session or demo cookie
+  // 1. Purge stale non-UUID snaploop_user cookie (e.g. old "user_1795242354968")
   const userCookie = request.cookies.get("snaploop_user")?.value;
-  const demoCookie = request.cookies.get("snaploop_demo")?.value;
-  const hasLocalSession = !!userCookie || demoCookie === "true";
-
-  if (hasLocalSession) {
-    if (pathname === "/login") {
-      return NextResponse.redirect(new URL("/feed", request.url));
+  if (userCookie) {
+    try {
+      const parsed = JSON.parse(userCookie);
+      const isUUIDFormat =
+        typeof parsed?.id === "string" &&
+        /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(parsed.id);
+      if (!isUUIDFormat) {
+        request.cookies.delete("snaploop_user");
+        supabaseResponse.cookies.delete("snaploop_user");
+      }
+    } catch {
+      request.cookies.delete("snaploop_user");
+      supabaseResponse.cookies.delete("snaploop_user");
     }
-    return supabaseResponse;
   }
 
   // 2. Public paths that never require authentication
   const isPublic =
     pathname.startsWith("/login") ||
     pathname.startsWith("/auth/callback") ||
-    pathname.startsWith("/api/auth");
+    pathname.startsWith("/api/auth") ||
+    pathname === "/";
 
-  if (isPublic) {
-    return supabaseResponse;
-  }
-
-  // 3. Supabase Auth check
+  // 3. Supabase Auth check & session cookie refresh
   const supabase = createServerClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
@@ -59,7 +62,9 @@ export async function middleware(request: NextRequest) {
     data: { user },
   } = await supabase.auth.getUser();
 
-  if (!user) {
+  const isDemo = request.cookies.get("snaploop_demo")?.value === "true";
+
+  if (!user && !isDemo && !isPublic) {
     return NextResponse.redirect(new URL("/login", request.url));
   }
 

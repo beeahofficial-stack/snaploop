@@ -33,7 +33,7 @@ export async function getCurrentSession(): Promise<CurrentSession> {
   const userCookie = cookieStore.get(SNAPLOOP_USER_COOKIE)?.value;
   const isDemo = cookieStore.get(SNAPLOOP_DEMO_COOKIE)?.value === "true";
 
-  // 1. Check Supabase auth session first (primary source of truth in production)
+  // 1. Check Supabase auth session (primary source of truth)
   try {
     const supabase = await createClient();
     const {
@@ -59,7 +59,10 @@ export async function getCurrentSession(): Promise<CurrentSession> {
       let existingCookieProfile: Profile | null = null;
       if (userCookie) {
         try {
-          existingCookieProfile = JSON.parse(userCookie) as Profile;
+          const parsed = JSON.parse(userCookie) as Profile;
+          if (isUUID(parsed.id)) {
+            existingCookieProfile = parsed;
+          }
         } catch {
           // ignore
         }
@@ -91,7 +94,7 @@ export async function getCurrentSession(): Promise<CurrentSession> {
       const style_prefs = normalizeStylePrefs(dbProfile?.style_prefs || existingCookieProfile?.style_prefs);
 
       const profile: Profile = {
-        id: user.id, // Always genuine authenticated Supabase UUID
+        id: user.id, // Genuine authenticated Supabase UUID
         username,
         full_name,
         bio,
@@ -123,25 +126,23 @@ export async function getCurrentSession(): Promise<CurrentSession> {
     console.warn("[Session] Supabase auth check notice:", err);
   }
 
-  // 2. Check custom user cookie session
+  // 2. If cookie contains a non-UUID ID (e.g. stale "user_1795242354968"), purge it!
   if (userCookie) {
     try {
-      const parsed = JSON.parse(userCookie) as Profile & { email?: string };
-      if (parsed && parsed.id && parsed.username) {
-        // Only treat as real Supabase user if id is a valid UUID
-        const hasValidUUID = isUUID(parsed.id);
-        return {
-          user: hasValidUUID ? { id: parsed.id, email: parsed.email } : null,
-          profile: {
-            ...parsed,
-            style_prefs: normalizeStylePrefs(parsed.style_prefs),
-          },
-          isAuthenticated: true,
-          isDemo: !hasValidUUID,
-        };
+      const parsed = JSON.parse(userCookie);
+      if (!isUUID(parsed?.id)) {
+        try {
+          cookieStore.delete(SNAPLOOP_USER_COOKIE);
+        } catch {
+          // ignore
+        }
       }
     } catch {
-      // invalid JSON, fall through
+      try {
+        cookieStore.delete(SNAPLOOP_USER_COOKIE);
+      } catch {
+        // ignore
+      }
     }
   }
 
@@ -150,7 +151,7 @@ export async function getCurrentSession(): Promise<CurrentSession> {
     return {
       user: null,
       profile: DEFAULT_GUEST_PROFILE,
-      isAuthenticated: true,
+      isAuthenticated: false,
       isDemo: true,
     };
   }

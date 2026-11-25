@@ -97,16 +97,11 @@ export default function FeedClient({
         setStories(DEFAULT_SAMPLE_STORIES);
       }
 
-      const savedPosts = localStorage.getItem("snaploop_local_posts");
-      if (savedPosts) {
-        const parsedPosts: Post[] = JSON.parse(savedPosts);
-        if (Array.isArray(parsedPosts) && parsedPosts.length > 0) {
-          setPosts((prev) => {
-            const existingIds = new Set(prev.map((p) => p.id));
-            const newPosts = parsedPosts.filter((p) => !existingIds.has(p.id));
-            return [...newPosts, ...prev];
-          });
-        }
+      // Purge any stale local mock posts from localStorage
+      try {
+        localStorage.removeItem("snaploop_local_posts");
+      } catch {
+        // ignore
       }
     } catch {
       setStories(DEFAULT_SAMPLE_STORIES);
@@ -125,26 +120,10 @@ export default function FeedClient({
 
   const handleCreated = (post: Post) => {
     setPosts((prev) => [post, ...prev]);
-    try {
-      const existing = localStorage.getItem("snaploop_local_posts");
-      const list = existing ? JSON.parse(existing) : [];
-      localStorage.setItem("snaploop_local_posts", JSON.stringify([post, ...list].slice(0, 50)));
-    } catch {
-      // ignore
-    }
   };
 
   const handleDelete = (postId: string) => {
     setPosts((prev) => prev.filter((p) => p.id !== postId));
-    try {
-      const existing = localStorage.getItem("snaploop_local_posts");
-      if (existing) {
-        const list: Post[] = JSON.parse(existing);
-        localStorage.setItem("snaploop_local_posts", JSON.stringify(list.filter((p) => p.id !== postId)));
-      }
-    } catch {
-      // ignore
-    }
   };
 
   // Check if current user has an active story

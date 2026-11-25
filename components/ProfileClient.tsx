@@ -55,25 +55,14 @@ export default function ProfileClient({
   const [saving, setSaving] = useState(false);
   const [savingDecor, setSavingDecor] = useState(false);
 
-  // Sync any posts created in the feed from localStorage on mount so they always show on Profile
+  // Purge any stale local mock posts from localStorage on mount
   useEffect(() => {
-    if (!isOwnProfile) return;
     try {
-      const localStr = localStorage.getItem("snaploop_local_posts");
-      if (localStr) {
-        const localList: Post[] = JSON.parse(localStr);
-        if (Array.isArray(localList) && localList.length > 0) {
-          setPosts((prev) => {
-            const existingIds = new Set(prev.map((p) => p.id));
-            const newPosts = localList.filter((p) => !existingIds.has(p.id));
-            return newPosts.length > 0 ? [...newPosts, ...prev] : prev;
-          });
-        }
-      }
+      localStorage.removeItem("snaploop_local_posts");
     } catch {
       // ignore
     }
-  }, [isOwnProfile, profile.id]);
+  }, []);
 
   // New pin creation in Comfort Moodboard
   const [newPinTitle, setNewPinTitle] = useState("");
