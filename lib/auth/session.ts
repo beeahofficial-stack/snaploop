@@ -11,8 +11,10 @@ export function isUUID(str: unknown): str is string {
   return /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(str);
 }
 
+export const DEMO_GUEST_UUID = "e0e0e0e0-e0e0-40e0-80e0-e0e0e0e0e0e0";
+
 export const DEFAULT_GUEST_PROFILE: Profile = {
-  id: "demo-user-id",
+  id: DEMO_GUEST_UUID,
   username: "beeahofficial",
   full_name: "Beeah",
   bio: "Curating my aesthetic Pinterest comfort zone & daily chess streaks! 🌿✨",
@@ -126,11 +128,21 @@ export async function getCurrentSession(): Promise<CurrentSession> {
     console.warn("[Session] Supabase auth check notice:", err);
   }
 
-  // 2. If cookie contains a non-UUID ID (e.g. stale "user_1795242354968"), purge it!
+  // 2. Check user cookie session (if Supabase getUser didn't find session yet)
   if (userCookie) {
     try {
-      const parsed = JSON.parse(userCookie);
-      if (!isUUID(parsed?.id)) {
+      const parsed = JSON.parse(userCookie) as Profile & { email?: string };
+      if (parsed && isUUID(parsed.id) && parsed.username) {
+        return {
+          user: { id: parsed.id, email: parsed.email },
+          profile: {
+            ...parsed,
+            style_prefs: normalizeStylePrefs(parsed.style_prefs),
+          },
+          isAuthenticated: true,
+          isDemo: false,
+        };
+      } else {
         try {
           cookieStore.delete(SNAPLOOP_USER_COOKIE);
         } catch {
@@ -151,7 +163,7 @@ export async function getCurrentSession(): Promise<CurrentSession> {
     return {
       user: null,
       profile: DEFAULT_GUEST_PROFILE,
-      isAuthenticated: false,
+      isAuthenticated: true,
       isDemo: true,
     };
   }

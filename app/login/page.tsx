@@ -64,8 +64,7 @@ export default function LoginPage() {
         toast.success(`Welcome to SnapLoop, ${data.profile?.full_name || username}! ✨`, {
           icon: "🌱",
         });
-        router.push("/feed");
-        router.refresh();
+        window.location.href = "/feed";
       } else {
         toast.error(data.error || "Failed to create account");
       }
@@ -109,8 +108,7 @@ export default function LoginPage() {
         } catch {}
 
         toast.success(`Welcome back, ${data.profile?.full_name || "friend"}! 🌿`);
-        router.push("/feed");
-        router.refresh();
+        window.location.href = "/feed";
       } else {
         toast.error(data.error || "Invalid email or password");
       }
@@ -152,8 +150,7 @@ export default function LoginPage() {
       const res = await fetch("/api/auth/demo", { method: "POST" });
       if (res.ok) {
         toast.success("Welcome to SnapLoop! ✨", { icon: "🌿" });
-        router.push("/feed");
-        router.refresh();
+        window.location.href = "/feed";
       } else {
         toast.error("Couldn't start demo session");
         setDemoLoading(false);

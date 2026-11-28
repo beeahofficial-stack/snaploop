@@ -84,10 +84,16 @@ export async function POST(request: Request) {
     };
 
     const cookieStore = await cookies();
+    const isProd = process.env.NODE_ENV === "production";
+
+    // Clear demo cookie if present
+    cookieStore.delete("snaploop_demo");
+
     cookieStore.set(SNAPLOOP_USER_COOKIE, JSON.stringify(profile), {
       path: "/",
       httpOnly: true,
       sameSite: "lax",
+      secure: isProd,
       maxAge: 60 * 60 * 24 * 30,
     });
 

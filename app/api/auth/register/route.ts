@@ -100,10 +100,16 @@ export async function POST(request: Request) {
 
     // Set persistent session cookie so user is immediately logged in
     const cookieStore = await cookies();
+    const isProd = process.env.NODE_ENV === "production";
+
+    // Clear demo cookie if present
+    cookieStore.delete("snaploop_demo");
+
     cookieStore.set(SNAPLOOP_USER_COOKIE, JSON.stringify(newProfile), {
       path: "/",
       httpOnly: true,
       sameSite: "lax",
+      secure: isProd,
       maxAge: 60 * 60 * 24 * 30, // 30 days
     });
 

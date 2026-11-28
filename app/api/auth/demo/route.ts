@@ -4,10 +4,13 @@ import { DEFAULT_GUEST_PROFILE, SNAPLOOP_DEMO_COOKIE, SNAPLOOP_USER_COOKIE } fro
 
 export async function POST() {
   const cookieStore = await cookies();
+  const isProd = process.env.NODE_ENV === "production";
+
   cookieStore.set(SNAPLOOP_DEMO_COOKIE, "true", {
     path: "/",
     httpOnly: true,
     sameSite: "lax",
+    secure: isProd,
     maxAge: 60 * 60 * 24 * 7, // 7 days
   });
 
@@ -15,6 +18,7 @@ export async function POST() {
     path: "/",
     httpOnly: true,
     sameSite: "lax",
+    secure: isProd,
     maxAge: 60 * 60 * 24 * 7,
   });
 

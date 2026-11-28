@@ -64,11 +64,28 @@ export async function middleware(request: NextRequest) {
 
   const isDemo = request.cookies.get("snaploop_demo")?.value === "true";
 
-  if (!user && !isDemo && !isPublic) {
+  const hasValidUserSession =
+    !!user ||
+    (!!userCookie &&
+      (() => {
+        try {
+          const p = JSON.parse(userCookie);
+          return (
+            typeof p?.id === "string" &&
+            /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(p.id)
+          );
+        } catch {
+          return false;
+        }
+      })());
+
+  const hasAccess = hasValidUserSession || isDemo;
+
+  if (!hasAccess && !isPublic) {
     return NextResponse.redirect(new URL("/login", request.url));
   }
 
-  if (user && pathname === "/login") {
+  if (hasAccess && pathname === "/login") {
     return NextResponse.redirect(new URL("/feed", request.url));
   }
 
